@@ -3,7 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include "pb_encode.h"
-#include "firstmile.pb.h"
+#include "first-mile-message-encoding.pb.h"
 
 
 /*
@@ -32,13 +32,13 @@
     }
 */
 
-static wmo_firstmile_poc1_Observation observations[1];
-static wmo_firstmile_poc1_Value values[2];
+static int_wmo_wis_spec_fmde_v1_conf_message_encoding_Observation observations[1];
+static int_wmo_wis_spec_fmde_v1_conf_message_encoding_Value values[2];
 
 bool encode_values(pb_ostream_t *stream, const pb_field_t *field, void * const *arg);
 
 bool encode_observations(pb_ostream_t *stream, const pb_field_t *field, void * const *arg) {
-    wmo_firstmile_poc1_Observation *obs = &observations[0];
+    int_wmo_wis_spec_fmde_v1_conf_message_encoding_Observation *obs = &observations[0];
 
     time_t current_time = time(NULL);
     obs->parameterDefinitionId = 1;
@@ -52,19 +52,19 @@ bool encode_observations(pb_ostream_t *stream, const pb_field_t *field, void * c
     if (!pb_encode_tag_for_field(stream, field))
         return false;
 
-    return pb_encode_submessage(stream, wmo_firstmile_poc1_Observation_fields, obs);
+    return pb_encode_submessage(stream, int_wmo_wis_spec_fmde_v1_conf_message_encoding_Observation_fields, obs);
 }
 
 bool encode_values(pb_ostream_t *stream, const pb_field_t *field, void * const *arg) {
-    values[0].which_kind = wmo_firstmile_poc1_Value_floatValue_tag;
+    values[0].which_kind = int_wmo_wis_spec_fmde_v1_conf_message_encoding_Value_floatValue_tag;
     values[0].kind.floatValue = 23.5f;
 
-    values[1].which_kind = wmo_firstmile_poc1_Value_emptyValue_tag;
+    values[1].which_kind = int_wmo_wis_spec_fmde_v1_conf_message_encoding_Value_emptyValue_tag;
 
     for (int i = 0; i < 2; i++) {
         if (!pb_encode_tag_for_field(stream, field))
             return false;
-        if (!pb_encode_submessage(stream, wmo_firstmile_poc1_Value_fields, &values[i]))
+        if (!pb_encode_submessage(stream, int_wmo_wis_spec_fmde_v1_conf_message_encoding_Value_fields, &values[i]))
             return false;
     }
 
@@ -75,16 +75,16 @@ int main() {
     uint8_t buffer[1024];
     pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
 
-    wmo_firstmile_poc1_Data data = wmo_firstmile_poc1_Data_init_zero;
+    int_wmo_wis_spec_fmde_v1_conf_message_encoding_Data data = int_wmo_wis_spec_fmde_v1_conf_message_encoding_Data_init_zero;
 
     data.observations.funcs.encode = &encode_observations;
     data.observations.arg = NULL;
 
-    wmo_firstmile_poc1_FirstMileMessage msg = wmo_firstmile_poc1_FirstMileMessage_init_zero;
-    msg.which_content = wmo_firstmile_poc1_FirstMileMessage_data_tag;
+    int_wmo_wis_spec_fmde_v1_conf_message_encoding_FirstMileMessage msg = int_wmo_wis_spec_fmde_v1_conf_message_encoding_FirstMileMessage_init_zero;
+    msg.which_content = int_wmo_wis_spec_fmde_v1_conf_message_encoding_FirstMileMessage_data_tag;
     msg.content.data = data;
 
-    bool status = pb_encode(&stream, wmo_firstmile_poc1_FirstMileMessage_fields, &msg);
+    bool status = pb_encode(&stream, int_wmo_wis_spec_fmde_v1_conf_message_encoding_FirstMileMessage_fields, &msg);
     size_t message_length = stream.bytes_written;
 
     if (!status) {

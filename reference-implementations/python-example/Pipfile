@@ -4,10 +4,11 @@ verify_ssl = true
 name = "firstmile-proto"
 
 [scripts]
-build-proto = "bash -c 'mkdir -p protospy && python -m grpc_tools.protoc --experimental_allow_proto3_optional --proto_path=../../standard/protobuf-schema --python_out=protospy/ ../../standard/protobuf-schema/firstmile.proto'"
+build-proto = "bash -c 'mkdir -p protospy && python -m grpc_tools.protoc --experimental_allow_proto3_optional --proto_path=../../schemas --python_out=protospy/ ../../schemas/first-mile-message-encoding.proto'"
 
 [packages]
 protobuf = "*"
+grpcio-tools = "*"
 paho-mqtt = "*"
 dash = "*"
 dash-bootstrap-components = "*"

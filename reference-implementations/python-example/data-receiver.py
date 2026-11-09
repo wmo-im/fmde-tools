@@ -5,7 +5,7 @@
 # Receives FirstMileMessage wrappers containing either metadata or data; stores the latest metadata and displays received values on the graph.
 #
 # Run it as in the following example:
-# python3 data-receiver.py --broker s87beff9.ala.eu-central-1.emqxsl.com --port 8883 --tls --insecure --topic "firstmile/#"  --username geolux --password "XXXX"
+# python3 data-receiver.py --broker s87beff9.ala.eu-central-1.emqxsl.com --port 8883 --tls --insecure --topic "firstmile/a/+/+"  --username geolux --password "XXXX"
 #
 # After starting the receiver, open the following URL in the browser: http://localhost:8050
 
@@ -15,7 +15,7 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 import plotly.graph_objs as go
-from protospy import firstmile_pb2 as pb2
+from protospy import first_mile_message_encoding_pb2 as pb2
 from google.protobuf.json_format import MessageToDict
 import threading
 import queue
@@ -27,6 +27,16 @@ import re
 
 
 state = {}
+
+# First Mile Topic Hierarchy (FMDE 9.1.3): exactly four levels, firstmile/a/<group-id>/<node-id>.
+# Metadata and Data share this single topic; ids follow FMDE 9.1.8 (Req 20).
+FMTH_TOPIC_RE = re.compile(r"^firstmile/a/([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$")
+
+def parse_fmth_topic(topic):
+    """Return 'group-id/node-id' for a valid FMTH topic, or None."""
+    match = FMTH_TOPIC_RE.match(topic)
+    return f"{match.group(1)}/{match.group(2)}" if match else None
+
 message_queue = queue.Queue()
 metadata_queue = queue.Queue()
 
@@ -37,19 +47,25 @@ def on_connect(client, userdata, flags, rc):
 
 def on_message(client, userdata, msg):
     print("Received message on topic:", msg.topic)
-    topic = msg.topic
-    payload = msg.payload
+    key = parse_fmth_topic(msg.topic)
+    if key is None:
+        print(f"⚠️ Ignoring message: topic '{msg.topic}' is not firstmile/a/<group-id>/<node-id>")
+        return
 
     message = pb2.FirstMileMessage()
-    message.ParseFromString(payload)
+    try:
+        message.ParseFromString(msg.payload)
+    except Exception as e:
+        print(f"⚠️ Ignoring message on '{msg.topic}': cannot decode FirstMileMessage ({e})")
+        return
 
     content_type = message.WhichOneof('content')
     if content_type == 'metadata':
         d = MessageToDict(message.metadata)
-        metadata_queue.put((topic, d))
+        metadata_queue.put((key, msg.topic, d))
     elif content_type == 'data':
         d = MessageToDict(message.data)
-        message_queue.put((topic, d))
+        message_queue.put((key, msg.topic, d))
 
 
 # MQTT handler
@@ -202,59 +218,41 @@ def render_site_page(topic):
 def update_page(pathname, n_intervals):
     # Process queued MQTT metadata messages
     while not metadata_queue.empty():
-        topic, msg = metadata_queue.get()
+        key, topic, msg = metadata_queue.get()
+        if key not in state:
+            state[key] = {
+                "last_messages": [],
+                "data": [],
+                "warnings": []
+            }
 
-        # use regex to extract vendor and nodeid from the topic in format firstmile/{version}/{vendor}/{nodeid}
-        match = re.match(r"firstmile/([^/]+)/([^/]+)/([^/]+)", topic)
-        if match:
-            version = match.group(1)
-            vendor = match.group(2)
-            nodeid = match.group(3)
-            key = f"{vendor}/{nodeid}"
-
-            if key not in state:
-                state[key] = {
-                    "last_messages": [],
-                    "data": [],
-                    "warnings": []
-                }
-
-            state[key]["metadata"] = msg
-            state[key]["last_messages"].append(msg)
-            state[key]["last_messages"] = state[key]["last_messages"][-20:]
+        state[key]["metadata"] = msg
+        state[key]["last_messages"].append(msg)
+        state[key]["last_messages"] = state[key]["last_messages"][-20:]
 
     # Process queued MQTT data messages
     while not message_queue.empty():
-        topic, msg = message_queue.get()
+        key, topic, msg = message_queue.get()
+        if key not in state:
+            state[key] = {
+                "last_messages": [],
+                "data": [],
+                "warnings": []
+            }
 
-        # use regex to extract vendor and nodeid from the topic in format firstmile/{version}/{vendor}/{nodeid}
-        match = re.match(r"firstmile/([^/]+)/([^/]+)/([^/]+)", topic)
-        if match:
-            version = match.group(1)
-            vendor = match.group(2)
-            nodeid = match.group(3)
-            key = f"{vendor}/{nodeid}"
+        if "metadata" not in state[key]:
+            warning = f"⚠️ WARNING: Data for topic {topic} arrived with no metadata and no cached metadata."
+            print(warning)
+            state[key]["warnings"].append(warning)
 
-            if key not in state:
-                state[key] = {
-                    "last_messages": [],
-                    "data": [],
-                    "warnings": []
-                }
+        state[key]["last_messages"].append(msg)
+        state[key]["last_messages"] = state[key]["last_messages"][-20:]
 
-            if "metadata" not in state[key]:
-                warning = f"⚠️ WARNING: Data for topic {topic} arrived with no metadata and no cached metadata."
-                print(warning)
-                state[key]["warnings"].append(warning)
-
-            state[key]["last_messages"].append(msg)
-            state[key]["last_messages"] = state[key]["last_messages"][-20:]
-
-            state[key]["data"].extend(msg.get("observations", []))
-            # Limit stored data to avoid memory growth
-            MAX_OBS = 500
-            if len(state[key]["data"]) > MAX_OBS:
-                state[key]["data"] = state[key]["data"][-MAX_OBS:]
+        state[key]["data"].extend(msg.get("observations", []))
+        # Limit stored data to avoid memory growth
+        MAX_OBS = 500
+        if len(state[key]["data"]) > MAX_OBS:
+            state[key]["data"] = state[key]["data"][-MAX_OBS:]
 
     # Routing
     if pathname == "/" or pathname == "":

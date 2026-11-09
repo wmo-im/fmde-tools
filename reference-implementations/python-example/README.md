@@ -14,9 +14,11 @@ The demo project consists of two scripts:
 
     $ pipenv run build-proto
 
+This compiles the schema in [`schemas/first-mile-message-encoding.proto`](../../schemas/first-mile-message-encoding.proto) into `protospy/first_mile_message_encoding_pb2.py`.
+
 ## Start receiver
 
-    $ pipenv run python data-receiver.py --broker s87beff9.ala.eu-central-1.emqxsl.com --port 8883 --tls --insecure --topic "firstmile/#"  --username geolux --password "XXXX"
+    $ pipenv run python data-receiver.py --broker s87beff9.ala.eu-central-1.emqxsl.com --port 8883 --tls --insecure --topic "firstmile/a/+/+"  --username geolux --password "XXXX"
 
 Replace the broker address, port, topic, username and password with your data.
 
@@ -24,12 +26,15 @@ After starting the receiver, open browser and go to the following URL: http://lo
 
 ## Start sender
 
-Example to run the sender to send both measurement and metadata, for site 1:
+Example to run the sender to send both measurement and metadata, for site 1.
+Metadata (retained) and data are published to the same topic, `firstmile/a/<group-id>/<node-id>` (FMDE 9.1.3).
+`--group` and `--nodeid` must use only lowercase letters, digits and hyphens.
+
     
-    $ python3 data-sender.py --period 10 --vendor geolux --nodeid "AWS123" --broker s87beff9.ala.eu-central-1.emqxsl.com --username geolux --password "XXXX" --port 8883 --tls --insecure
+    $ pipenv run python data-sender.py --period 10 --group geolux --nodeid aws-123 --broker s87beff9.ala.eu-central-1.emqxsl.com --username geolux --password "XXXX" --port 8883 --tls --insecure
 
 ## Run payload generator to create example messages
 
     $ python3 payload-generator.py
 
-The created JSON files with payloads will be stored to /standard/examples/example_output
+The generator reads the schema bindings (node, observers, parameter definitions and namespaces) from the JSON files in `example_schema_binding/`, and stores the created JSON files with payloads to `example_output/`.

@@ -8,20 +8,33 @@
 # pipenv run build-proto
 #
 # Example fo running this script (replace username and password with your own credentials):
-# python3 data-sender.py --period 10 --vendor geolux --nodeid "AWS123" --broker s87beff9.ala.eu-central-1.emqxsl.com --username geolux --password "XXXX" --port 8883 --tls --insecure
+# python3 data-sender.py --period 10 --group geolux --nodeid aws-123 --broker s87beff9.ala.eu-central-1.emqxsl.com --username geolux --password "XXXX" --port 8883 --tls --insecure
 
 import argparse
+import re
 import random
 import time
 import ssl
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
-from protospy import firstmile_pb2 as pb2
+from protospy import first_mile_message_encoding_pb2 as pb2
 from google.protobuf import timestamp_pb2 as Timestamp
 from google.protobuf import empty_pb2 as Empty
 
-proto_version = 'poc1' # as defined in firstmile.proto package definition
+# First Mile Topic Hierarchy (FMDE 9.1.3): firstmile/<version>/<group-id>/<node-id>
+# Metadata and Data are both published to this single topic.
+FMTH_CHANNEL = 'firstmile'
+FMTH_VERSION = 'a'  # alphabetical topic hierarchy version (not the schema version)
+# group-id and node-id: lowercase ASCII letters, digits and hyphens, no leading/trailing hyphen (FMDE 9.1.8, Req 20)
+FMTH_ID_RE = re.compile(r'^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+
+def fmth_id(value):
+    if not FMTH_ID_RE.match(value):
+        raise argparse.ArgumentTypeError(
+            f"'{value}' is not a valid FMTH id: use lowercase letters, digits and hyphens, "
+            "not starting or ending with a hyphen")
+    return value
 
 # These function just create some fake measurements
 def random_temperature():
@@ -108,14 +121,15 @@ def generate_observations(parameter_defs):
     return observations
 
 # Create the metadata
-def create_metadata():
+def create_metadata(nodeid):
     # Node device
     node = pb2.Node(
+        id = nodeid,
         name = "ArcticX100 Data Logger",
         location = pb2.Location(
             latitude = -90,
             longitude = 0,
-            heightMeter = 10.0,
+            heightMetres = 10.0,
             referenceSurface = pb2.GL
         ),
         url = "https://org.com/data/obs_meta.json",
@@ -130,7 +144,7 @@ def create_metadata():
     location = pb2.Location(
         latitude = -90,
         longitude = 0,
-        heightMeter = 13.0,
+        heightMetres = 13.0,
         referenceSurface = pb2.GL
     ),
     url = "https://org.com/data/obs_meta.json",
@@ -151,9 +165,9 @@ def build_data_transmission(nodeid):
     return transmission
 
 # This is the main function to construct Metadata message
-def build_metadata_transmission():
+def build_metadata_transmission(nodeid):
     # Define the node device and observers
-    node, observers = create_metadata()
+    node, observers = create_metadata(nodeid)
 
     # Define the measurement parameters
     param_defs = define_parameters()
@@ -202,8 +216,9 @@ def main():
     parser = argparse.ArgumentParser(description="AWS MQTT Node PoC")
     parser.add_argument("--broker", required=True, help="MQTT broker address")
     parser.add_argument("--port", type=int, default=1883, help="MQTT broker port")
-    parser.add_argument("--vendor", required=True, help="Vendor name")
-    parser.add_argument("--nodeid", required=True, help="Node ID")
+    parser.add_argument("--group", required=True, type=fmth_id,
+                        help="Topic group-id: organisation responsible for the node")
+    parser.add_argument("--nodeid", required=True, type=fmth_id, help="Topic node-id: identifies this node within the group")
     parser.add_argument("--period", type=int, default=10, help="Period in seconds between measurements")
     parser.add_argument("--username", help="MQTT username (optional)")
     parser.add_argument("--password", help="MQTT password (optional)")
@@ -216,11 +231,11 @@ def main():
 
     args = parser.parse_args()
 
-    # unified topic for both metadata and data
-    topic = f"firstmile/{proto_version}/{args.vendor}/{args.nodeid}"
+    # single topic for both metadata and data (FMDE 9.1.3)
+    topic = f"{FMTH_CHANNEL}/{FMTH_VERSION}/{args.group}/{args.nodeid}"
 
     # build and send metadata transmission (retained)
-    metadata = build_metadata_transmission()
+    metadata = build_metadata_transmission(args.nodeid)
     msg = pb2.FirstMileMessage(metadata=metadata)
     payload_bytes = msg.SerializeToString()
     send_mqtt_payload(args, topic, payload_bytes, retain=True)
