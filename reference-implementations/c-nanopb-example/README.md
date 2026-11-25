@@ -31,7 +31,14 @@ The program will output the encoded protobuf message as a hexadecimal string.
 The code in the `nanopb/` subdirectory is imported (copy-pasted) from the nanopb project.
 
 ### Schema Files
-The compiled First Mile schema files (`firstmile.pb.c` and `firstmile.pb.h`) were generated using the nanopb protoc compiler from the  `firstmile.proto` file.
+The compiled First Mile schema files (`first-mile-message-encoding.pb.c` and `first-mile-message-encoding.pb.h`) were generated using the nanopb 0.4.9.1 generator from [`schemas/first-mile-message-encoding.proto`](../../schemas/first-mile-message-encoding.proto). To regenerate them after a schema change, run from the repository root:
+
+```bash
+pip install nanopb==0.4.9.1
+nanopb_generator -I schemas -D reference-implementations/c-nanopb-example/schema schemas/first-mile-message-encoding.proto
+```
+
+The generated C identifiers are prefixed with the schema's protobuf package name (`int_wmo_wis_spec_fmde_v1_conf_message_encoding_`).
 
 The dependent Google protobuf schemas (`empty.pb.*` and `timestamp.pb.*`) were taken from the "full" Protocol Buffers implementation, (https://github.com/protocolbuffers/protobuf), and then compiled with the nanopb compiler.
 

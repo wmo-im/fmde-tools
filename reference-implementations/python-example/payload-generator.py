@@ -1,16 +1,19 @@
-from protospy import firstmile_pb2
+from protospy import first_mile_message_encoding_pb2 as pb2
 from google.protobuf.json_format import Parse
 from google.protobuf.json_format import MessageToJson
 from google.protobuf.json_format import ParseDict
 import json
 import os
 
-path_oberservers = "../../standard/examples/example_schema_binding/observer.json"
-path_node = "../../standard/examples/example_schema_binding/host.json"
-path_parameters = "../../standard/examples/example_schema_binding/parameters.json"
-path_namespaces = "../../standard/examples/example_schema_binding/namespaces.json"
+base_dir = os.path.dirname(os.path.abspath(__file__))
+bindings_dir = os.path.join(base_dir, "example_schema_binding")
 
-output_dir = "../../standard/examples/example_output"
+path_observers = os.path.join(bindings_dir, "observer.json")
+path_node = os.path.join(bindings_dir, "node.json")
+path_parameters = os.path.join(bindings_dir, "parameters.json")
+path_namespaces = os.path.join(bindings_dir, "namespaces.json")
+
+output_dir = os.path.join(base_dir, "example_output")
 os.makedirs(output_dir, exist_ok=True)
 
 def read_config_json(json_path, schema):
@@ -25,46 +28,46 @@ def read_config_json(json_path, schema):
     return bindings
 
 # load and parse bindings for devices and parameters
-observers = read_config_json(path_oberservers, firstmile_pb2.ObserverDevice)
-parameter_definitions = read_config_json(path_parameters, firstmile_pb2.ParameterDefinition)
-namespace_definitions = read_config_json(path_namespaces, firstmile_pb2.Metadata.NamespacesEntry)
+observers = read_config_json(path_observers, pb2.ObserverDevice)
+parameter_definitions = read_config_json(path_parameters, pb2.ParameterDefinition)
+namespace_definitions = read_config_json(path_namespaces, pb2.Metadata.NamespacesEntry)
 # read node bindings
 with open(path_node, "r") as f:
     binding_json = f.read()
-    node = firstmile_pb2.Node()
+    node = pb2.Node()
     Parse(binding_json, node)
 
-# generate internal observations
+# generate internal observations (parameter definition 2: supply voltage, internal temperature)
 observations = []
-internal_observation = firstmile_pb2.Observation()
-internal_observation.parameterDefinitionId = 1
+internal_observation = pb2.Observation()
+internal_observation.parameterDefinitionId = 2
 internal_observation.time.GetCurrentTime()
 internal_observation.values.extend([
-    firstmile_pb2.Value(doubleValue=12.9),
-    firstmile_pb2.Value(doubleValue=33.28)
+    pb2.Value(doubleValue=12.9),
+    pb2.Value(doubleValue=33.28)
 ])
 observations.append(internal_observation)
 
-# generate 3 random observations
+# generate 3 sensor observations (parameter definition 1: water level, water temperature,
+# wind speed, wind direction, water level alarm)
 for i in range(3):
-    observation = firstmile_pb2.Observation()
+    observation = pb2.Observation()
     observation.time.GetCurrentTime()
-    observation.parameterDefinitionId = 2
+    observation.parameterDefinitionId = 1
     observation.values.extend([
-        firstmile_pb2.Value(doubleValue=2304.54),
-        firstmile_pb2.Value(doubleValue=12.3),
-        firstmile_pb2.Value(doubleValue=1.2),
-        firstmile_pb2.Value(intValue=232),
-
-        firstmile_pb2.Value(boolValue=True)
+        pb2.Value(doubleValue=2304.54),
+        pb2.Value(doubleValue=12.3),
+        pb2.Value(doubleValue=1.2),
+        pb2.Value(int32Value=232),
+        pb2.Value(boolValue=True)
     ])
     observations.append(observation)
 
 # create transmission payload with observations only
-data_message = firstmile_pb2.Data()
+data_message = pb2.Data()
 data_message.observations.extend(observations)
 
-data_wrapper = firstmile_pb2.FirstMileMessage(data=data_message)
+data_wrapper = pb2.FirstMileMessage(data=data_message)
 
 # generate data message
 serialized_data_message = data_wrapper.SerializeToString()
@@ -74,13 +77,13 @@ with open(f"{output_dir}/data_message.json", "w") as f:
     f.write(json.dumps(json_str, indent=4, ensure_ascii=False))
 
 # add metadata
-metadata_message = firstmile_pb2.Metadata()
+metadata_message = pb2.Metadata()
 metadata_message.node.CopyFrom(node)
 metadata_message.observers.extend(observers)
 metadata_message.parameterDefinitions.extend(parameter_definitions)
 metadata_message.namespaces.update({ns.key: ns.value for ns in namespace_definitions})
 
-metadata_wrapper = firstmile_pb2.FirstMileMessage(metadata=metadata_message)
+metadata_wrapper = pb2.FirstMileMessage(metadata=metadata_message)
 
 # generate output with metadata
 serialized_with_metadata = metadata_wrapper.SerializeToString()

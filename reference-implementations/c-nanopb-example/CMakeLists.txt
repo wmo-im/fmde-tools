@@ -14,7 +14,7 @@ set(NANOPB_SOURCES
 )
 
 set(SCHEMA_SOURCES
-    schema/firstmile.pb.c
+    schema/first-mile-message-encoding.pb.c
     schema/google/protobuf/empty.pb.c
     schema/google/protobuf/timestamp.pb.c
 )
